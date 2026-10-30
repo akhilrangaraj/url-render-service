@@ -279,6 +279,22 @@ of this section).
 | Writing this section | this repo | 5 | 12 | 5,484 | 1,262,269 | 3,667 |
 | **Total** | | **129** | **300** | **239,230** | **22,170,392** | **102,394** |
 
+### 5. Confirmed by running the image
+
+The audit was done by reading code alone. After the fixes, the image was built
+and run with `docker run --read-only` as uid 1000:
+
+- With the **original** setup (read-only root, no writable `/tmp`), the
+  container exits at startup: `BrowserType.launch: EROFS: read-only file
+  system, mkdtemp '/tmp/playwright-artifacts-…'`. That is audit finding 1,
+  now observed rather than inferred.
+- With the **fixed** setup (`/tmp` writable, `HOME=/tmp`), `/health` returns
+  200, `/render` without a key returns 401, and text and PDF renders of
+  https://example.com succeed.
+
+The sibling repo got the same treatment, and it found a bug there that
+reading the code had missed (see its README).
+
 ### Takeaways
 
 - qwen wrote plausible, well-structured code and described upstream APIs
