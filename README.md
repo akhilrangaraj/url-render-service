@@ -236,9 +236,9 @@ wrote 16 integration tests: a local `http.server` serves fixture pages to a
 real Chromium, with no Playwright mocks. It also reported honestly what it
 assumed and what it didn't run.
 
-The run survived two infrastructure problems: a stale `kubectl port-forward`
-to the model server, restarted mid-run, and a host OOM on the llama server.
-Hermes's retry logic picked up after both without losing work.
+The run survived a stale `kubectl port-forward` to the model server, which
+was restarted mid-run. Hermes's retry logic picked up afterwards without
+losing work.
 
 ### 4. Review and final tweaks: Claude
 
