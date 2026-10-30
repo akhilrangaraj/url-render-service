@@ -28,12 +28,17 @@ spec:
         runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      # Chromium needs a writable /dev/shm larger than the 64Mi container default.
+      # Chromium needs a writable /dev/shm larger than the 64Mi container
+      # default, and a writable /tmp for its profile / artifact dirs (the
+      # root filesystem stays read-only).
       volumes:
         - name: shm
           emptyDir:
             medium: Memory
             sizeLimit: 512Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
       containers:
         - name: url-render
           # <-- replaced by scripts/deploy.sh (or your GitOps) with the real image
@@ -48,13 +53,25 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+          env:
+            # Chromium writes to $HOME/.cache and $HOME/.config; with a
+            # read-only root fs, point it at the writable /tmp mount.
+            - name: HOME
+              value: /tmp
+            - name: RENDER_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: url-render-auth
+                  key: api-keys
           envFrom:
             - configMapRef:
                 name: url-render-config
-          # Chromium writes to /tmp and /dev/shm; give it writable mounts.
+          # Chromium writes to /tmp, $HOME and /dev/shm; give it writable mounts.
           volumeMounts:
             - name: shm
               mountPath: /dev/shm
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: "250m"

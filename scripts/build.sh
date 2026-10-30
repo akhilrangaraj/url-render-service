@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REGISTRY="${REGISTRY:?set REGISTRY, e.g. registry.example.com/akhil}"
+REGISTRY="${REGISTRY:-registry.rangaraj.net/akhilrangaraj}"
 TAG="${TAG:-latest}"
 IMG="${REGISTRY}/url-render-service:${TAG}"
 

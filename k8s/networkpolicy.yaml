@@ -3,8 +3,13 @@
 # headless browser from being pointed at the cloud metadata service or at
 # in-cluster services just because a request asks it to fetch an internal URL.
 #
-# Note: k3s only enforces NetworkPolicy when it was started with
-# `--enable-network-policy` (pulls in Calico). On other distros it's on by default.
+# Note: loopback (127.0.0.0/8) is NOT covered by NetworkPolicy at all --
+# CNI plugins never see packets on lo, so the `except` entry below is
+# best-effort only.
+#
+# k3s enforces NetworkPolicy BY DEFAULT via its embedded kube-router
+# controller; it is disabled only when k3s is started with
+# `--disable-network-policy`. There is no Calico involved.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -23,11 +28,13 @@ spec:
     - ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
-    # Public internet only; everything private / loopback / link-local / CGNAT is denied.
+    # Public internet only; everything private / loopback / link-local /
+    # multicast / reserved is denied.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
+              - 0.0.0.0/8         # "this network" -- not routable
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
@@ -35,7 +42,35 @@ spec:
               - 127.0.0.0/8
               - 100.64.0.0/10    # CGNAT (GCP external range)
               - 198.18.0.0/15    # benchmarking
-    # Loopback (the browser talking to itself, if ever needed).
-    - to:
-        - ipBlock:
-            cidr: 127.0.0.1/32
+              - 224.0.0.0/4      # multicast
+              - 240.0.0.0/4      # reserved / future use
+---
+# Ingress policy: only render clients may reach TCP 8000. Clients are pods
+# labelled `render-client: "true"` in ANY namespace (namespaceSelector: {} +
+# podSelector).
+#
+# Note: `kubectl port-forward` is unaffected by this policy -- it enters the
+# pod via the kubelet on the node, not through the cluster network. If your
+# CNI happens to block kubelet-initiated traffic (probes etc.), add an
+# ipBlock for the node CIDR here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: url-render-ingress
+  namespace: url-render
+  labels:
+    app: url-render
+spec:
+  podSelector:
+    matchLabels:
+      app: url-render
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              render-client: "true"
+      ports:
+        - { protocol: TCP, port: 8000 }
