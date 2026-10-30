@@ -192,3 +192,103 @@ python3 -m venv .venv
 .venv/bin/python -m playwright install chromium
 .venv/bin/python -m pytest -q tests
 ```
+
+## How this repo was built (a small benchmark)
+
+This service was an experiment in letting a local model write production-ish
+infrastructure code, with a frontier model auditing the result. All dates are
+2026-10-29.
+
+- **Builder:** `qwen3.8-27b` (Q4_K_M, llama.cpp on one Intel Arc B70),
+  driven by [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+- **Reviewer:** `claude-opus-5-5` in Claude Code.
+
+### 1. First version: qwen, unsupervised
+
+One Hermes conversation built this repo and its sibling,
+`firefox-mcp-server` (a stateful Firefox MCP server), from a single prompt.
+The result read well: a clean FastAPI app, sensible k8s hardening and honest
+comments. It had no tests.
+
+### 2. Audit: Claude
+
+Claude read every file without running any of qwen's code. It checked claims
+about upstream behaviour against the published package source. Findings for
+this repo:
+
+| # | Finding | Severity |
+|---|---------|----------|
+| 1 | `readOnlyRootFilesystem: true` with no writable `/tmp`: Playwright can't create its profile dir, so the pod crash-loops on k8s (it works under plain `docker run`). | Blocker |
+| 2 | A page that busy-loops after `load` makes `page.evaluate`/`page.content()` hang forever. The semaphore slot is never released, so 4 such URLs block the pod for good. | High |
+| 3 | `/health` returned HTTP 200 even with the browser dead, so the liveness probe never restarted the pod. | High |
+| 4 | No auth and no ingress policy: any pod in the cluster could use the renderer. | Medium |
+| 5 | `--no-sandbox` with arbitrary URLs: a renderer exploit owns the shared browser and can see other requests in flight. | Medium (documented trade-off) |
+| 6 | The NetworkPolicy's loopback rule did nothing (NetworkPolicy never applies to `lo`). The README said k3s needs `--enable-network-policy` and "pulls in Calico"; in fact k3s enforces NetworkPolicy by default via kube-router. | Low (docs) |
+| 7 | A non-ASCII URL in `X-Render-Url` caused a 500 (latin-1 header encoding). The target's HTTP status was never reported, and output size was unbounded. | Low |
+| 8 | The smoke test and the example client wrote to a missing `out/` dir. | Low |
+
+### 3. Fix: qwen, from a Claude-written spec
+
+Claude turned the audit into a precise spec (files, behaviour, acceptance
+criteria, and a required real-Chromium test suite). It handed the spec to qwen
+through `qwen-task`, a one-shot Hermes run. qwen fixed all 12 spec items and
+wrote 16 integration tests: a local `http.server` serves fixture pages to a
+real Chromium, with no Playwright mocks. It also reported honestly what it
+assumed and what it didn't run.
+
+The run survived two infrastructure problems: a stale `kubectl port-forward`
+to the model server, restarted mid-run, and a host OOM on the llama server.
+Hermes's retry logic picked up after both without losing work.
+
+### 4. Review and final tweaks: Claude
+
+Claude reviewed the diff, re-ran the tests (16 passed) and changed four
+things:
+
+- The deadline test ran with 4 render slots, so it couldn't catch a leaked
+  slot. It now runs with `MAX_CONCURRENT=1` and `PER_USER_CONCURRENT=1`, so a
+  leak makes the follow-up request fail.
+- API keys are compared as SHA-256 digests with `hmac.compare_digest`. Comparing
+  the raw strings lets timing reveal the key's length.
+- `deploy.sh` pipes the generated key into `kubectl` through stdin, so it never
+  shows up in `ps`.
+- Corrected a wrong comment about `Browser.is_connected`.
+
+### Token usage
+
+**qwen3.8-27b** (self-hosted, $0). "Input" counts every prompt token sent;
+most of it was served from llama.cpp's prompt cache.
+
+| Phase | Calls | Input | of which cached | Output | Time |
+|-------|------:|------:|----------------:|-------:|-----:|
+| First version, both repos together (one interleaved conversation turn) | 31 | 3,244,200 | 2,814,566 | 76,003 | 83 min |
+| Hermes background "update the skill library" review, run automatically after the build | 6 | 979,492 | 955,326 | 19,013 | 24 min |
+| Fix run, this repo only | 30 (+1 title) | 1,684,850 (+517) | 1,653,311 | 49,528 (+13) | 43 min |
+
+**claude-opus-5-5** (one Claude Code session, all phases through the commit
+of this section).
+
+| Phase | Applies to | Calls | Uncached input | Cache write | Cache read | Output |
+|-------|------------|------:|---------------:|------------:|-----------:|-------:|
+| Audit (incl. reading upstream npm sources) | both repos | 16 | 32 | 73,297 | 1,064,684 | 21,290 |
+| Multi-user / parallelism design advice | both repos | 1 | 4 | 8,122 | 89,295 | 3,332 |
+| Investigating the Hermes background review | Hermes | 17 | 40 | 25,376 | 1,922,027 | 6,593 |
+| Skill rewrite, both fix specs, qwen supervision | both repos | 38 | 86 | 65,566 | 6,110,424 | 38,855 |
+| Review, tweaks and commit of this repo's fixes | this repo | 13 | 28 | 26,396 | 2,659,934 | 8,135 |
+| Push, llama OOM diagnosis, ingress coordination | infra | 39 | 98 | 34,989 | 9,061,759 | 20,522 |
+| Writing this section | this repo | 5 | 12 | 5,484 | 1,262,269 | 3,667 |
+| **Total** | | **129** | **300** | **239,230** | **22,170,392** | **102,394** |
+
+### Takeaways
+
+- qwen wrote plausible, well-structured code and described upstream APIs
+  accurately. It missed runtime failure modes (read-only filesystem, hostile
+  pages, health semantics) and wrote no tests.
+- Given a precise spec, the same model fixed everything and wrote a real
+  test suite. The spec and the review are where the frontier model added the
+  most value. Claude wrote about 102k output tokens in total; qwen wrote
+  about 125k for the code itself (build plus fix).
+- Hermes's automatic skill-writing review ran for 24 minutes after the build
+  and saved several of the audit's mistakes as rules for future sessions. That
+  skill was later corrected by hand, and automatic skill creation was turned
+  off.
