@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: url-render
+  # Shared with firefox-mcp-server (both apply this namespace; it's idempotent).
+  name: browsers
   labels:
-    app.kubernetes.io/name: url-render-service
     app.kubernetes.io/part-of: browser-infra

@@ -4,7 +4,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: url-render
-  namespace: url-render
+  namespace: browsers
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

@@ -14,7 +14,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: url-render-egress
-  namespace: url-render
+  namespace: browsers
   labels:
     app: url-render
 spec:
@@ -57,7 +57,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: url-render-ingress
-  namespace: url-render
+  namespace: browsers
   labels:
     app: url-render
 spec:

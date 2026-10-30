@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: url-render-config
-  namespace: url-render
+  namespace: browsers
   labels:
     app: url-render
 data:

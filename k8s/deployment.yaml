@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: url-render
-  namespace: url-render
+  namespace: browsers
   labels:
     app: url-render
     app.kubernetes.io/name: url-render-service
@@ -28,6 +28,10 @@ spec:
         runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      # Pull credentials for registry.rangaraj.net (a dockerconfigjson Secret
+      # in the same namespace; deploy.sh checks that it exists).
+      imagePullSecrets:
+        - name: regcred
       # Chromium needs a writable /dev/shm larger than the 64Mi container
       # default, and a writable /tmp for its profile / artifact dirs (the
       # root filesystem stays read-only).

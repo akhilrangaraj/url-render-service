@@ -102,16 +102,19 @@ cannot occupy every slot.
 # 1. Build + push the image (default registry: registry.rangaraj.net/akhilrangaraj)
 ./scripts/build.sh --push
 
-# 2. Deploy (creates the url-render-auth secret with a generated key if absent)
+# 2. Deploy into namespace `browsers` (override with NS=...). Needs an image
+#    pull secret `regcred` in that namespace; deploy.sh stops with a copy
+#    command if it's missing. Creates the url-render-auth secret with a
+#    generated key if absent.
 ./scripts/deploy.sh
-# read the generated key back:
-kubectl -n url-render get secret url-render-auth -o jsonpath='{.data.api-keys}' | base64 -d
+# read the generated key back (stored as `user:key`; clients send only the key):
+kubectl -n browsers get secret url-render-auth -o jsonpath='{.data.api-keys}' | base64 -d
 
 # 3. Reach it (cluster-internal)
 ./scripts/port-forward.sh &
 
 # 4. Use it
-export RENDER_API_KEY=alice:<your-key>
+export RENDER_API_KEY=<key part only, without "user:">
 curl -s localhost:8000/health
 curl -s -X POST localhost:8000/render -H 'Content-Type: application/json' \
      -H "Authorization: Bearer ${RENDER_API_KEY}" \
@@ -139,7 +142,7 @@ requirements.txt           runtime deps
 requirements-dev.txt       pytest, httpx (tests)
 app/main.py                FastAPI app (health, render, auth)
 tests/test_main.py         integration tests (real Chromium, no mocks)
-k8s/namespace.yaml         namespace: url-render
+k8s/namespace.yaml         namespace: browsers (shared with firefox-mcp-server)
 k8s/configmap.yaml         MAX_CONCURRENT
 k8s/deployment.yaml        2 replicas, non-root, /dev/shm + /tmp, probes
 k8s/service.yaml           ClusterIP :8000
