@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.pyc
+.venv
+venv
+*.egg-info
+.pytest_cache
+.k8s.local.yaml
+client/out
+README.md

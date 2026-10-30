@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-render-config
+  namespace: url-render
+  labels:
+    app: url-render
+data:
+  # Max concurrent renders per pod (bounds memory). Raise if you give more RAM.
+  MAX_CONCURRENT: "4"

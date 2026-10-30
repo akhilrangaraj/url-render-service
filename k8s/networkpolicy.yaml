@@ -1,0 +1,41 @@
+# Egress-only policy: allow DNS + public internet, block every private /
+# link-local / metadata range. This is the anti-SSRF guard -- it stops the
+# headless browser from being pointed at the cloud metadata service or at
+# in-cluster services just because a request asks it to fetch an internal URL.
+#
+# Note: k3s only enforces NetworkPolicy when it was started with
+# `--enable-network-policy` (pulls in Calico). On other distros it's on by default.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: url-render-egress
+  namespace: url-render
+  labels:
+    app: url-render
+spec:
+  podSelector:
+    matchLabels:
+      app: url-render
+  policyTypes:
+    - Egress
+  egress:
+    # DNS (any destination).
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Public internet only; everything private / loopback / link-local / CGNAT is denied.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16   # cloud metadata (169.254.169.254) lives here
+              - 127.0.0.0/8
+              - 100.64.0.0/10    # CGNAT (GCP external range)
+              - 198.18.0.0/15    # benchmarking
+    # Loopback (the browser talking to itself, if ever needed).
+    - to:
+        - ipBlock:
+            cidr: 127.0.0.1/32

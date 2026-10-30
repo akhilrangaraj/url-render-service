@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: url-render
+  labels:
+    app.kubernetes.io/name: url-render-service
+    app.kubernetes.io/part-of: browser-infra

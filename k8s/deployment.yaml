@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: url-render
+  namespace: url-render
+  labels:
+    app: url-render
+    app.kubernetes.io/name: url-render-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: url-render
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: url-render
+        app.kubernetes.io/name: url-render-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Chromium needs a writable /dev/shm larger than the 64Mi container default.
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+      containers:
+        - name: url-render
+          # <-- replaced by scripts/deploy.sh (or your GitOps) with the real image
+          image: REPLACE_WITH_REGISTRY/url-render-service:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: url-render-config
+          # Chromium writes to /tmp and /dev/shm; give it writable mounts.
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "700Mi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3

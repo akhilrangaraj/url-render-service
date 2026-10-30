@@ -1,0 +1,21 @@
+# OPTIONAL: horizontal autoscaling for the render service.
+# Requires metrics-server. On clusters < 1.23 change apiVersion to autoscaling/v2beta2.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: url-render
+  namespace: url-render
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: url-render
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
